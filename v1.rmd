@@ -1,0 +1,553 @@
+---
+title: "Clinical Trial Management Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    social: menu
+runtime: shiny
+---
+
+
+```{r, include= FALSE}
+## library 
+
+library(dplyr)
+library(plyr)
+library(magrittr)
+library(flexdashboard)
+library(tibble)
+library(janitor)
+library(tidyr)
+library(ggplot2)
+library(plotly)
+library(lubridate)
+library(anytime)
+library(mgcv)
+library(reshape2)
+library(shiny)
+library(DT)
+library(scales)
+
+
+```
+
+
+<span style="background-color: MediumSeaGreen; font-size: 150%;" >Clinical Investigator A</span>
+=====================================  
+
+Row {data-height=100} 
+-----------------------------------------------------------------------
+
+### Patient(s) Awaiting Enrollment
+```{r}
+
+enrollment = data.frame(patient_id = sprintf("%03.0f", 1:5))
+
+if (as.numeric(nrow(enrollment)) > 0) {
+  
+renderValueBox(
+  
+enrollment%>%
+  nrow() %>%
+  as.numeric() %>%
+  valueBox(color = 'rgb(255, 57, 71)' ,icon = "fa-clipboard-check")
+
+)
+  
+} else {
+  
+ valueBox(tags$h3("You're All Caught up"), color = 'green' ,icon = "fa-smile")
+  
+}
+
+
+
+```
+
+### Adverse Events
+
+```{r }
+
+report_ae = data.frame( patient_id = as.character())
+
+
+if (as.numeric(nrow(report_ae))>0) {
+  
+  renderValueBox(
+ 
+  report_ae %>%
+   nrow %>%
+   as.numeric() %>%
+   valueBox(color = 'rgb(255, 57, 71)' ,icon = "fa-flag")
+  
+)
+  
+} else  {
+  
+  
+  valueBox(tags$h3("All caught up!"), color = 'green' ,icon = "fa-smile")
+  
+}
+
+```
+
+### Recovery Case(s)
+
+```{r}
+
+recover = data.frame(patient_id = c('002','003'))
+  
+  
+if (as.numeric(nrow(recover)) > 0) {
+  
+renderValueBox(
+  
+recover %>%
+  nrow() %>%
+  as.numeric() %>%
+  valueBox(color = 'rgb(255, 57, 71)' ,icon = "fa-folder")
+
+)
+  
+} else {
+  
+ valueBox(tags$h3("You're All Caught up"), color = 'green' ,icon = "fa-smile")
+  
+}
+
+```
+
+
+
+Row {.tabset}
+-----------------------------------------------------------------------
+
+### Enrollment Table
+
+```{r}
+
+
+
+
+
+if (as.numeric(nrow(enrollment)) > 0) {
+  
+renderDataTable( escape = FALSE, 
+                 
+                 enrollment %>%
+                   mutate(Record_Link = paste0('<a href=','https://www.google.com','> Check Records Online!</a>')) %>%
+                   dplyr::rename('Patient ID'=patient_id,'Record Link'=Record_Link)
+                 
+                 
+                 )
+  
+} else {
+  
+ tags$h3("Thank you! You're All Caught up.")
+  
+}
+
+```
+
+### Adverse Events Table
+
+```{r}
+
+if (as.numeric(nrow(report_ae))>0) {
+  
+
+renderDataTable(escape = FALSE, report_ae_table)
+  
+} else {
+  
+ tags$h3("Thank you! You're All Caught up.")
+  
+}
+
+```
+
+### Recovery Case(s)
+
+```{r}
+
+
+
+if (as.numeric(nrow(recover))>0) {
+  
+
+renderDataTable(escape = FALSE,
+                
+                recover %>%
+                   mutate(Recover_Period = rep(c('Period 1','Period 2'),1),
+                          Record_Link = paste0('<a href=','https://www.google.com','> Check Records Online!</a>')) %>%
+                  dplyr::rename('Patient ID' = patient_id,
+                                'Recovery Period' = Recover_Period,
+                                'Record Link' = Record_Link)
+                
+)
+  
+} else {
+  
+ tags$h3("Thank you! You're All Caught up.")
+  
+}
+
+```
+
+Daily Survey Response
+=====================================  
+
+Row {data-height=200} 
+---------------------------------------------------------------------------------------------
+
+### Total Daily Surveys Sent Today
+
+```{r}
+
+valueBox( 24 ,color = 'blue' ,icon = "fa-thumbs-up")
+  
+
+```
+
+
+### Morning Surveys Complete
+
+```{r}
+
+daily_sym_precent = data.frame(
+  sent_on.date = rep(seq(as.Date("2021-01-01"), as.Date("2021-01-30"), by="days"),2),
+  Survey = rep(c('Morning','Evening'),each =30),
+  Percent = floor(runif(60, min=75, max=101))
+)
+
+
+daily_sym_precent %>%
+  filter(Survey == 'Morning') %>%
+  arrange(desc(sent_on.date)) %>%
+  head(1) %>%
+  select(Percent) %>%
+  as.numeric() %>%
+  gauge( min = 0, max = 100, symbol = '%', gaugeSectors(
+  success = c(90, 100), warning = c(70, 89), danger = c(0, 69)))
+
+```
+
+### Evening Surveys Complete
+```{r}
+
+daily_sym_precent %>%
+  filter(Survey == 'Evening') %>%
+  arrange(desc(sent_on.date)) %>%
+  head(1) %>%
+  select(Percent) %>%
+  as.numeric() %>%
+  gauge( min = 0, max = 100, symbol = '%', gaugeSectors(
+  success = c(90, 100), warning = c(70, 89), danger = c(0, 69)))
+
+
+```
+
+Row 
+-----------------------------------------------------------------------
+
+```{r}
+
+sliderInput('x', 'Trend Going Back (Days)', 
+            min=1, 
+            max = as.numeric(max(daily_sym_precent$sent_on.date)-min(daily_sym_precent$sent_on.date)),
+            value=10, 
+            step=1, 
+            round=0)
+
+```
+
+### Daily Survey Completion Trend
+
+```{r}
+
+
+renderPlot({
+
+daily_sym_precent %>%
+    filter(sent_on.date >= (max(sent_on.date)-input$x)) %>%
+    ggplot(aes(x = sent_on.date, y = Percent, fill = Survey))+ 
+    geom_bar(position="dodge", stat="identity") + 
+    scale_x_date(date_labels="%m/%d/%y",date_breaks  ="1 day") +
+    theme(axis.text.x = element_text(angle = 60, vjust = 0.5)) +
+    geom_text(aes(label = Percent), position = position_dodge(width = 1)) +
+    labs(x = 'Date', y = 'Completion Percentage') 
+
+
+})
+
+
+
+```
+
+
+Patient Profile
+=====================================  
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+
+### Measurement Tracking
+
+```{r}
+
+patient_profile = data.frame(patient_id = sprintf("%03.0f", 1:6),
+                             Gender = rep(c('Male','Female'),3 ),
+                             Group = rep(c('Treatment','Control'),each = 3 ),
+                             Days_in_Trial = floor(runif(6, min=10, max=31)),
+                             Hospitalized = rep(c('Yes','No'),3 ),
+                             Recovered = rep(c('Yes','No'),each =3 ),
+                             Record_Link = paste0('<a href=','https://www.google.com','> Check Records Online!</a>'))
+
+daily_patients = data.frame(patient_id = rep(sprintf("%03.0f", 1:6),each = 30),
+                            Date =  rep(seq(as.Date("2021-01-01"), as.Date("2021-01-30"), by="days"),30),
+                            temperature = floor(runif(180, min=92, max=110)),
+                            oxygen = floor(runif(180, min=90, max=99)),
+                            pulse= floor(runif(180, min=60, max=130)),
+                            respiratory = floor(runif(180, min=22, max=32)),
+                            glucose =  floor(runif(180, min=60, max=120)))
+
+
+
+
+
+
+selectInput("id1", label = "Patient ID", unique(patient_profile$patient_id))
+
+sliderInput('day1', 'Trend Going Back(Days)',
+            min=1,
+            max = as.numeric(max(daily_patients$Date)- min(daily_patients$Date)),
+            value=10,
+            step=1,
+            round=0)
+
+
+```
+
+<span style="color: blue;">- The Blue Area </span> <span>is the normal range for each measurement. <span>
+
+<span style="color:goldenrod;">- The Yellow Area</span> <span>is the abnormal measurement range that will need to be closely monitored. <span>
+
+<span style="color:tomato;">- The Red Area</span> <span>is the severely abnormal measurement range that needs immediate medical attention.<span>
+
+Row {data-height=250}
+-------------------------------------------------------------------
+```{r}
+
+renderDataTable( escape = FALSE,
+                 
+ patient_profile %>%
+    filter(patient_id == input$id1) %>%
+    dplyr::rename('Patient ID' = patient_id,
+                  'Days in Trial' = Days_in_Trial,
+                  'Record Link' = Record_Link)
+ )
+
+
+
+```
+
+Row 
+---------------------------------------------------------------------------------------------------
+
+### Body Temperature °F
+
+```{r}
+
+renderPlot({
+  
+daily_patients %>%
+  filter(patient_id == input$id1) %>%
+  filter(Date >= (max(daily_patients$Date)- input$day1)) %>%
+  select(Date, temperature) %>%
+  mutate(safe_zone = ifelse(temperature >= 103 , 'No','Yes')) %>%
+      ggplot( aes(x = Date, y = temperature))+
+      geom_line() +
+      geom_point(size=2, 
+                 aes( color =  safe_zone,
+                      size = safe_zone)) +
+      scale_colour_manual(values = c("gold","lightgoldenrod4")) +
+      scale_size_manual(values =c(1, 1.5))+
+      theme(legend.position = "none") +
+      labs(x='',y='')+
+      geom_text(aes(label = temperature, color = safe_zone), size = 5, vjust = 0.3, hjust =-0.3)+
+      scale_color_manual(values = c( "Yes"="blue", "No"="lightgoldenrod4" )) + 
+      scale_x_date(date_labels="%m/%d/%y",
+                   date_breaks  ="1 day")+
+      theme(axis.text.x = element_text(angle = 60, vjust = 0.5)) +
+      geom_hline(yintercept=103, linetype="dashed", color = "lightgoldenrod4", size=1) +
+      geom_rect(aes(xmin = as.Date(min(Date)), xmax = as.Date(max(Date)), ymin = 95, ymax = 103), alpha = 0.015, fill = "azure3") +
+      geom_rect(aes(xmin = as.Date(min(Date)), xmax = as.Date(max(Date)), ymin = 103, ymax = Inf), alpha = 0.015, fill = "lightgoldenrod2")
+
+    
+})
+
+
+```
+
+
+### Oxygen Saturation %SpO2
+
+```{r}
+
+renderPlot({
+  
+daily_patients %>%
+  filter(patient_id == input$id1) %>%
+  filter(Date >= (max(daily_patients$Date)- input$day1)) %>%
+  select(Date, oxygen) %>%
+  mutate(safe_zone = ifelse(oxygen >100| oxygen <= 93, 'No','Yes')) %>%
+      ggplot( aes(x = Date, y = oxygen))+
+      geom_line() +
+      geom_point(size=2, 
+                 aes(
+                   color =  safe_zone,
+                   size = safe_zone)) +
+      scale_colour_manual(values = c('Yes' = "blue",'No'="red")) +
+      scale_size_manual(values =c(1, 1.5))+
+      theme(legend.position = "none") +
+      labs(x='',y='')+
+      geom_text(aes(label = oxygen, color = safe_zone), size = 5, vjust = 0.3, hjust =-0.3)+
+      scale_color_manual(values = c( "Yes"="blue", "No"="#990000" )) + 
+      scale_x_date(date_labels="%m/%d/%y",
+                   date_breaks  ="1 day")+
+      theme(axis.text.x = element_text(angle = 60, vjust = 0.5)) +
+      geom_hline(yintercept=100, linetype="dashed", color = "red", size=1) +
+      geom_hline(yintercept=95, linetype="dashed", color = "lightgoldenrod4", size=1) +
+      geom_hline(yintercept=93, linetype="dashed", color = "red", size=1) +
+      geom_rect(aes(xmin = as.Date(min(Date)), xmax = as.Date(max(Date)), ymin = 95, ymax = 100), alpha = 0.015, fill = "azure3") +
+        geom_rect(aes(xmin = as.Date(min(Date)), xmax = as.Date(max(Date)), ymin = 93, ymax = 95), alpha = 0.015, fill = "lightgoldenrod2") +
+      geom_rect(aes(xmin = as.Date(min(Date)), xmax = as.Date(max(Date)), ymin = -Inf, ymax = 93), alpha = 0.005, fill = "red") 
+  
+
+})
+
+
+
+```
+
+Row 
+---------------------------------------------------------------------------------------------------
+
+### Pulse Rate /Minute
+
+```{r}
+
+renderPlot({
+  
+  
+daily_patients %>%
+  filter(patient_id == input$id1) %>%
+  filter(Date >= (max(daily_patients$Date)- input$day1)) %>%
+  dplyr::select(Date, pulse) %>%
+      mutate(safe_zone = ifelse(pulse > 125, 'No','Yes')) %>%
+      ggplot( aes(x = Date, y = pulse))+
+      geom_line() +
+      geom_point(size=2, 
+                 aes(
+                   color =  safe_zone,
+                   size = safe_zone)) +
+      scale_colour_manual(values = c('Yes' = "blue",'No'="red")) +
+      scale_size_manual(values =c(1, 1.5))+
+      theme(legend.position = "none") +
+      labs(x='',y='')+
+      geom_text(aes(label = pulse, color = safe_zone), size = 5, vjust = 0.3, hjust =-0.3)+
+      scale_color_manual(values = c( "Yes"="blue", "No"="#990000" )) + 
+      scale_x_date(date_labels="%m/%d/%y",
+                   date_breaks  ="1 day")+
+      theme(axis.text.x = element_text(angle = 60, vjust = 0.5)) +
+      geom_hline(yintercept = 125, linetype="dashed", color = "red", size=1) +
+      geom_rect(aes(xmin = as.Date(min(Date)), xmax = as.Date(max(Date)), ymin = 0, ymax = 101), alpha = 0.015, fill = "azure3") +
+      geom_rect(aes(xmin = as.Date(min(Date)), xmax = as.Date(max(Date)), ymin = 101, ymax = 125), alpha = 0.015, fill = "lightgoldenrod2") +
+      geom_rect(aes(xmin = as.Date(min(Date)), xmax = as.Date(max(Date)), ymin = 125, ymax = Inf), alpha = 0.008, fill = "red") 
+
+  
+
+})
+
+
+
+```
+
+### Respiratory Rate /Minute
+
+```{r}
+
+renderPlot({
+
+daily_patients %>%
+  filter(patient_id == input$id1) %>%
+  filter(Date >= (max(daily_patients$Date)- input$day1)) %>%
+  dplyr::select(Date, respiratory) %>%
+      mutate(safe_zone = ifelse(respiratory >= 30, 'No','Yes')) %>%
+      ggplot( aes(x = Date, y = respiratory))+
+      geom_line() +
+      geom_point(size=2, 
+                 aes(
+                   color =  safe_zone,
+                   size = safe_zone)) +
+      scale_colour_manual(values = c('Yes' = "blue",'No'="red")) +
+      scale_size_manual(values =c(1, 1.5))+
+      theme(legend.position = "none") +
+      labs(x='',y='')+
+      geom_text(aes(label = respiratory, color = safe_zone), size = 5, vjust = 0.3, hjust =-0.3)+
+      scale_color_manual(values = c( "Yes"="blue", "No"="#990000" )) + 
+      scale_x_date(date_labels="%m/%d/%y",
+                   date_breaks  ="1 day")+
+      theme(axis.text.x = element_text(angle = 60, vjust = 0.5)) +
+      geom_hline(yintercept=29, linetype="dashed", color = "red", size=1) +
+      #geom_hline(yintercept=93, linetype="dashed", color = "red", size=1) +
+      geom_rect(aes(xmin = as.Date(min(Date)), xmax = as.Date(max(Date)), ymin = 0, ymax = 21), alpha = 0.015, fill = "azure3") +
+      geom_rect(aes(xmin = as.Date(min(Date)), xmax = as.Date(max(Date)), ymin = 21, ymax = 29), alpha = 0.015, fill = "lightgoldenrod2") +
+      geom_rect(aes(xmin = as.Date(min(Date)), xmax = as.Date(max(Date)), ymin =29, ymax = Inf), alpha = 0.008, fill = "red") 
+
+
+})
+
+
+
+
+```
+
+### Fasting Blood Glucose mg/dL
+
+```{r}
+
+renderPlot({
+
+daily_patients %>%
+  filter(patient_id == input$id1) %>%
+  filter(Date >= (max(daily_patients$Date)- input$day1)) %>% 
+    dplyr::select(Date, glucose) %>%
+      mutate(safe_zone = ifelse(glucose < 60 | glucose > 300 , 'No','Yes')) %>%
+      ggplot( aes(x = Date, y = glucose))+
+      geom_line() +
+      geom_point(size=2, 
+                 aes(color =  safe_zone,
+                   size = safe_zone)) +
+      scale_colour_manual(values = c('Yes' = "blue",'No'="orange")) +
+      scale_size_manual(values =c(1, 1.5))+
+      theme(legend.position = "none") +
+      labs(x='',y='')+
+      geom_text(aes(label = glucose, color = safe_zone), size = 5, vjust = 0.3, hjust =-0.3)+
+      scale_color_manual(values = c( "Yes"="blue", "No"="lightgoldenrod4" )) + 
+      scale_x_date(date_labels="%m/%d/%y",
+                   date_breaks  ="1 day")+
+      theme(axis.text.x = element_text(angle = 60, vjust = 0.5)) +
+      geom_hline(yintercept= 60, linetype="dashed", color = "lightgoldenrod4", size=1) +
+      geom_hline(yintercept= 150, linetype="dashed", color = "lightgoldenrod4", size=1) +
+      geom_rect(aes(xmin = as.Date(min(Date)), xmax = as.Date(max(Date)), ymin = 150, ymax = Inf), alpha = 0.015, fill = "lightgoldenrod2") +
+      geom_rect(aes(xmin = as.Date(min(Date)), xmax = as.Date(max(Date)), ymin = 60, ymax = 150), alpha = 0.015, fill = "azure3") +
+      geom_rect(aes(xmin = as.Date(min(Date)), xmax = as.Date(max(Date)), ymin = -Inf, ymax = 60), alpha = 0.015, fill = "lightgoldenrod2") 
+    
+
+})
+
+
+
+
+```
